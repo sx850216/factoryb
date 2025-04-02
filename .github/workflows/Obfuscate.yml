@@ -1,9 +1,11 @@
-name: BPB Obfuscation
+name: Build Obfuscate BPB Panel
 
-on: 
+on:
   push:
-    branches: [main]
+    branches:
+      - main
   schedule:
+    # Runs everyday at 1:00 AM
     - cron: "0 1 * * *"
 
 permissions:
@@ -12,42 +14,58 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Cache npm dependencies
         uses: actions/cache@v3
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Install dependencies
+        run: |
+          npm install -g javascript-obfuscator
 
-      - name: Cache origin.js
-        id: cache-origin-js
+      - name: Cache BPB workjs
+        id: cache-bpb-workjs
         uses: actions/cache@v3
         with:
           path: origin.js
-          key: ${{ runner.os }}-origin-js-${{ hashFiles('https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js') }}
+          key: ${{ runner.os }}-BPB-workjs-${{ hashFiles('https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js') }}
 
-      - name: Install javascript-obfuscator and download origin.js
-        if: steps.cache-origin-js.outputs.cache-hit != 'true'
+      - name: Clone BPB workjs
+        if: steps.cache-bpb-workjs.outputs.cache-hit != 'true'
         run: |
-          npm i -g javascript-obfuscator --unsafe-perm
-          curl -sLo origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
+          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
 
-      - name: Obfuscate code
-        run: >
-          javascript-obfuscator origin.js -o _worker.js
-          --compact --control-flow-flattening=false
-          --dead-code-injection=false --identifier-names-generator hexadecimal
+      - name: Obfuscate BPB worker js
+        run: |
+          javascript-obfuscator origin.js --output _worker.js \
+          --compact true \
+          --control-flow-flattening true \
+          --control-flow-flattening-threshold 0.5 \
+          --dead-code-injection true \
+          --dead-code-injection-threshold 0.5 \
+          --identifier-names-generator hexadecimal \
+          --string-array true \
+          --string-array-encoding 'rc4' \
+          --string-array-threshold 0.5 \
+          --unicode-escape-sequence true
 
-      - uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🔒 Update obfuscated worker"
           branch: main
+          commit_message: ':arrow_up: update latest bpb panel'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+          push_options: '--set-upstream'
