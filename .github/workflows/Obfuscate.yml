@@ -1,31 +1,53 @@
 name: BPB Obfuscation
 
 on: 
-  push: { branches: [main] }
-  schedule: [{ cron: "0 1 * * *" }]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 1 * * *"
 
-permissions: contents: write
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - uses: actions/setup-node@v4
-      with: { node-version: 20, cache: npm }
+      - uses: actions/checkout@v4
 
-    - run: |
-        npm i -g javascript-obfuscator --unsafe-perm
-        curl -sLo origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
-    - run: >
-        javascript-obfuscator origin.js -o _worker.js
-        --compact --control-flow-flattening
-        --dead-code-injection --identifier-names-generator hexadecimal
-    
-    - uses: stefanzweifel/git-auto-commit-action@v5
-      with: { 
-        commit_message: "🔒 Update obfuscated worker",
-        branch: main 
-      }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Cache origin.js
+        id: cache-origin-js
+        uses: actions/cache@v3
+        with:
+          path: origin.js
+          key: ${{ runner.os }}-origin-js-${{ hashFiles('https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js') }}
+
+      - name: Install javascript-obfuscator and download origin.js
+        if: steps.cache-origin-js.outputs.cache-hit != 'true'
+        run: |
+          npm i -g javascript-obfuscator --unsafe-perm
+          curl -sLo origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
+
+      - name: Obfuscate code
+        run: >
+          javascript-obfuscator origin.js -o _worker.js
+          --compact --control-flow-flattening=false
+          --dead-code-injection=false --identifier-names-generator hexadecimal
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🔒 Update obfuscated worker"
+          branch: main
